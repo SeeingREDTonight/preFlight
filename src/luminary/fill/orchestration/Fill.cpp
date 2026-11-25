@@ -226,6 +226,10 @@ static const char *dbg_pattern(InfillPattern p)
         return "3DHoneycomb";
     case ipGyroid:
         return "Gyroid";
+    case ipTpmsD:
+        return "TpmsD";
+    case ipTpmsFK:
+        return "TpmsFK";
     case ipHilbertCurve:
         return "HilbertCurve";
     case ipArchimedeanChords:
@@ -2409,6 +2413,8 @@ Polylines Layer::generate_sparse_infill_polylines_for_anchoring(FillAdaptive::Oc
         case ipHoneycomb:
         case ip3DHoneycomb:
         case ipGyroid:
+        case ipTpmsD:
+        case ipTpmsFK:
         case ipHilbertCurve:
         case ipArchimedeanChords:
         case ipOctagramSpiral:

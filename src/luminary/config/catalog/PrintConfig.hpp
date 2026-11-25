@@ -222,6 +222,8 @@ enum InfillPattern : int
     ipLightning,
     ipEnsuring,
     ipZigZag,
+    ipTpmsD,
+    ipTpmsFK,
     ipCount,
 };
 
@@ -884,6 +886,8 @@ PRINT_CONFIG_CLASS_DEFINE(
         (ConfigOptionFloatOrPercent, first_layer_infill_speed))((ConfigOptionFloat, infill_acceleration))(
         (ConfigOptionFloat, perimeter_acceleration))((ConfigOptionFloat, solid_infill_acceleration))(
         (ConfigOptionFloat, top_solid_infill_acceleration))
+    // Klipper square corner velocity per feature (0 = automatic)
+    ((ConfigOptionFloat, square_corner_velocity_accel_divisor))((ConfigOptionFloat, default_square_corner_velocity))((ConfigOptionFloat, external_perimeter_square_corner_velocity))((ConfigOptionFloat, perimeter_square_corner_velocity))((ConfigOptionFloat, top_solid_infill_square_corner_velocity))((ConfigOptionFloat, solid_infill_square_corner_velocity))((ConfigOptionFloat, infill_square_corner_velocity))((ConfigOptionFloat, bridge_square_corner_velocity))((ConfigOptionFloat, first_layer_square_corner_velocity))
     // Force the generation of solid shells between adjacent materials/volumes.
     ((ConfigOptionBool, interface_shells))((ConfigOptionFloat, layer_height))((ConfigOptionFloat,
                                                                                mmu_segmented_region_max_width))(
@@ -1060,6 +1064,10 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionFloat, machine_klipper_max_accel))              // [printer] max_accel (mm/s^2)
     ((ConfigOptionFloat, machine_klipper_square_corner_velocity)) // [printer] square_corner_velocity (mm/s)
     ((ConfigOptionFloat, machine_klipper_minimum_cruise_ratio))   // [printer] minimum_cruise_ratio (0-1)
+    ((ConfigOptionBool, machine_klipper_limited_corexy))          // [printer] kinematics: limited_corexy (Kalico)
+    ((ConfigOptionFloat, machine_klipper_max_x_accel))            // [printer] max_x_accel (mm/s^2)
+    ((ConfigOptionFloat, machine_klipper_max_y_accel))            // [printer] max_y_accel (mm/s^2)
+    ((ConfigOptionBool, machine_klipper_scale_xy_accel))          // [printer] scale_xy_accel
     ((ConfigOptionPercent, machine_time_compensation)))
 
 PRINT_CONFIG_CLASS_DEFINE(
@@ -1067,6 +1075,7 @@ PRINT_CONFIG_CLASS_DEFINE(
 
     ((ConfigOptionBool, autoemit_temperature_commands))((ConfigOptionInt, bed_temperature_extruder))(
         (ConfigOptionString, before_layer_gcode))((ConfigOptionString, between_objects_gcode))(
+        (ConfigOptionString, change_extrusion_role_gcode))(
         (ConfigOptionBool, binary_gcode))((ConfigOptionFloats, deretract_speed))((ConfigOptionString, end_gcode))(
         (ConfigOptionStrings, end_filament_gcode))((ConfigOptionString, extrusion_axis))(
         (ConfigOptionFloats, extrusion_multiplier))((ConfigOptionFloats, filament_diameter))(
@@ -1177,6 +1186,7 @@ PRINT_CONFIG_CLASS_DERIVED_DEFINE(
         (ConfigOptionInt, threads))((ConfigOptionString, thumbnails))((ConfigOptionEnum<GCodeThumbnailsFormat>,
                                                                        thumbnails_format))(
         (ConfigOptionFloat, travel_acceleration))((ConfigOptionFloat, travel_short_distance_acceleration))(
+        (ConfigOptionFloat, travel_square_corner_velocity))(
         (ConfigOptionBools, wipe))((ConfigOptionBool, wipe_tower))((ConfigOptionFloat, wipe_tower_acceleration))(
         (ConfigOptionFloat, wipe_tower_width))((ConfigOptionFloat, wipe_tower_brim_width))(
         (ConfigOptionFloat, wipe_tower_cone_angle))((ConfigOptionPercent, wipe_tower_extra_spacing))(

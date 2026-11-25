@@ -1347,6 +1347,9 @@ const std::unordered_map<std::string, ObjectKeyInvalidation> &object_key_invalid
              "external_perimeter_acceleration", "infill_acceleration", "solid_infill_acceleration",
              "top_solid_infill_acceleration", "bridge_acceleration"},
             {}, {psGCodeExport});
+        // Klipper square corner velocity, picked per path like the acceleration.
+        add({"square_corner_velocity_accel_divisor", "default_square_corner_velocity", "external_perimeter_square_corner_velocity", "perimeter_square_corner_velocity", "top_solid_infill_square_corner_velocity", "solid_infill_square_corner_velocity", "infill_square_corner_velocity", "bridge_square_corner_velocity", "first_layer_square_corner_velocity"},
+            {}, {psGCodeExport});
         add({"wipe_into_infill", "wipe_into_objects", "infill_speed", "perimeter_speed"}, {},
             {psWipeTower, psGCodeExport});
         // Fuzzy skin noise and visibility are applied by the perimeter generator; the

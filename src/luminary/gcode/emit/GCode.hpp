@@ -418,6 +418,12 @@ private:
     bool m_object_layer_over_raft;
     // Support for the extrusion role markers. Which marker is active?
     GCodeExtrusionRole m_last_extrusion_role;
+    // Role name last passed to change_extrusion_role_gcode (OrcaSlicer naming), empty before the first.
+    std::string m_last_role_change_name;
+    // change_extrusion_role_gcode for a role change to `role`, or "" (unset template / same role).
+    std::string change_extrusion_role_gcode(GCodeExtrusionRole role);
+    // Klipper SCV: the feature's own value if set, else acceleration / divisor, else the default (0 = none).
+    double square_corner_velocity_for(double fixed, double acceleration) const;
     // Support for G-Code Processor
     float m_last_height{0.0f};
     float m_last_layer_z{0.0f};

@@ -34,6 +34,8 @@
 #include "luminary/fill/patterns/procedural/FillHoneycomb.hpp"
 #include "luminary/fill/patterns/procedural/Fill3DHoneycomb.hpp"
 #include "luminary/fill/patterns/procedural/FillGyroid.hpp"
+#include "luminary/fill/patterns/procedural/FillTpmsD.hpp"
+#include "luminary/fill/patterns/procedural/FillTpmsFK.hpp"
 #include "luminary/fill/planepath/FillPlanePath.hpp"
 #include "luminary/fill/line/FillLine.hpp"
 #include "luminary/fill/rectilinear/FillRectilinear.hpp"
@@ -61,6 +63,10 @@ Fill *Fill::new_from_type(const InfillPattern type)
         return new Fill3DHoneycomb();
     case ipGyroid:
         return new FillGyroid();
+    case ipTpmsD:
+        return new FillTpmsD();
+    case ipTpmsFK:
+        return new FillTpmsFK();
     case ipRectilinear:
         return new FillRectilinear();
     case ipAlignedRectilinear:

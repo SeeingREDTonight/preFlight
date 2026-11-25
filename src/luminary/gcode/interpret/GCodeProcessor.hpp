@@ -332,6 +332,9 @@ public:
         float acceleration{0.0f};    // mm/s^2
         float max_entry_speed{0.0f}; // mm/s
         float safe_feedrate{0.0f};   // mm/s
+        // Acceleration before Kalico limited_corexy scaled it (0 = not scaled). Klipper's
+        // minimum_cruise_ratio smoothing uses min(base * (1 - mcr), scaled), as Kalico does.
+        float base_acceleration{0.0f}; // mm/s^2
         Flags flags;
         FeedrateProfile feedrate_profile;
         Trapezoid trapezoid;
@@ -369,6 +372,7 @@ private:
             float dir_x{0.0f};         // normalized X direction component
             float dir_y{0.0f};         // normalized Y direction component
             bool has_direction{false}; // true if this move has valid XY direction
+            float acceleration{0.0f};  // the move's acceleration after per-direction limits
 
             void reset();
         };
@@ -581,6 +585,12 @@ private:
     size_t m_rrf_jerk_affected_blocks{0};       // Debug counter for blocks affected by jerk policy
     float m_klipper_scv{5.0f};                  // Current square_corner_velocity for JD recalculation
     float m_klipper_minimum_cruise_ratio{0.5f}; // Current minimum_cruise_ratio
+    // Kalico limited_corexy: per-direction XY acceleration (and diagonal velocity) limits.
+    bool m_klipper_limited_corexy{false};
+    float m_klipper_max_x_accel{0.0f};
+    float m_klipper_max_y_accel{0.0f};
+    bool m_klipper_scale_xy_accel{true};
+    void load_klipper_limited_corexy(bool enabled, float max_x_accel, float max_y_accel, bool scale_xy_accel);
 
     float m_time_compensation{0.0f}; // 0% default (16ms min segment time handles most correction)
 

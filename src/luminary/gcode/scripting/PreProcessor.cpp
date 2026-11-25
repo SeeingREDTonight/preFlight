@@ -921,7 +921,11 @@ class _SettingsWrapper:
                     "Lightning",
                     "Ensuring",
                     "ZigZag",
+                    "TpmsD",
+                    "TpmsFK",
                 };
+                static_assert(sizeof(names) / sizeof(names[0]) == size_t(ipCount),
+                              "fill_pattern names must match InfillPattern");
                 return names[mv.fill_pattern];
             },
             "str: infill pattern name (Rectilinear, Gyroid, ...), empty for non-fill moves");

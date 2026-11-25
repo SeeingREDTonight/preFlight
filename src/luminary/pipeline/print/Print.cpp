@@ -132,6 +132,7 @@ const std::unordered_map<std::string, PrintKeyInvalidation> &print_key_invalidat
         };
         // Keys that influence the G-code generator only, or are notes with no influence at all.
         add({"autoemit_temperature_commands", "bed_shape", "bed_temperature", "before_layer_gcode",
+             "change_extrusion_role_gcode",
              "between_objects_gcode", "binary_gcode", "bridge_fan_speed", "overhang_fan_speed_0",
              "overhang_fan_speed_1", "overhang_fan_speed_2", "overhang_fan_speed_3", "chamber_temperature",
              "chamber_minimal_temperature", "colorprint_heights", "cooling", "cooling_slowdown_logic",
@@ -152,7 +153,8 @@ const std::unordered_map<std::string, PrintKeyInvalidation> &print_key_invalidat
              "retract_speed", "seam_type", "seam_notch_width", "seam_notch_angle",
              "single_extruder_multi_material_priming", "slowdown_below_layer_time", "standby_temperature_delta",
              "start_gcode", "start_filament_gcode", "custom_parameters_filament", "toolchange_gcode",
-             "travel_acceleration", "travel_short_distance_acceleration", "thumbnails", "thumbnails_format",
+             "travel_acceleration", "travel_short_distance_acceleration", "travel_square_corner_velocity",
+             "thumbnails", "thumbnails_format",
              "use_firmware_retraction", "use_relative_e_distances", "use_volumetric_e", "variable_layer_height", "wipe",
              "wipe_tower_acceleration",
              // Editing-time check only; nothing generated depends on it.
@@ -308,6 +310,10 @@ const std::unordered_map<std::string, PrintKeyInvalidation> &print_key_invalidat
              "machine_klipper_max_accel",
              "machine_klipper_square_corner_velocity",
              "machine_klipper_minimum_cruise_ratio",
+             "machine_klipper_limited_corexy",
+             "machine_klipper_max_x_accel",
+             "machine_klipper_max_y_accel",
+             "machine_klipper_scale_xy_accel",
              "machine_time_compensation"},
             {psGCodeExport});
         return t;

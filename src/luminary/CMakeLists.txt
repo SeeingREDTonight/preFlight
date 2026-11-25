@@ -414,6 +414,11 @@ set(LUMINARY_SOURCES
     fill/patterns/procedural/Fill3DHoneycomb.cpp
     fill/patterns/procedural/FillGyroid.hpp
     fill/patterns/procedural/FillGyroid.cpp
+    fill/patterns/procedural/FillTpmsD.hpp
+    fill/patterns/procedural/FillTpmsD.cpp
+    fill/patterns/procedural/FillTpmsFK.hpp
+    fill/patterns/procedural/FillTpmsFK.cpp
+    fill/patterns/procedural/MarchingSquares.hpp
     fill/patterns/procedural/FillHoneycomb.hpp
     fill/patterns/procedural/FillHoneycomb.cpp
     fill/patterns/lightning/FillLightning.hpp

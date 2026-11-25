@@ -245,6 +245,24 @@ std::string GCodeWriter::set_chamber_temperature(unsigned int temperature, bool 
     return gcode.str();
 }
 
+std::string GCodeWriter::set_square_corner_velocity(double scv)
+{
+    if (FLAVOR_IS_NOT(gcfKlipper) || scv <= 0.)
+        return {};
+    scv = std::round(scv * 100.) / 100.;
+    if (std::abs(scv - m_last_square_corner_velocity) < 0.005)
+        return {};
+    m_last_square_corner_velocity = scv;
+
+    std::ostringstream gcode;
+    gcode.imbue(std::locale::classic()); // always a decimal point
+    gcode << "SET_VELOCITY_LIMIT SQUARE_CORNER_VELOCITY=" << std::fixed << std::setprecision(2) << scv;
+    if (this->config.gcode_comments)
+        gcode << " ; adjust square corner velocity";
+    gcode << "\n";
+    return gcode.str();
+}
+
 std::string GCodeWriter::set_acceleration_internal(Acceleration type, unsigned int acceleration)
 {
     // Clamp the acceleration to the allowed maximum.

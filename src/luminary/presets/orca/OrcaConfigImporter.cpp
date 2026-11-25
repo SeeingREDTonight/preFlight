@@ -264,6 +264,7 @@ int OrcaConfigImporter::parse_and_map_profile(const std::string &json_content, P
             "before_layer_change_gcode",
             "layer_change_gcode",
             "change_filament_gcode",
+            "change_extrusion_role_gcode",
             "filament_start_gcode",
             "filament_end_gcode",
             "template_custom_gcode",
@@ -698,6 +699,7 @@ int OrcaConfigImporter::parse_and_map_profile(const std::string &json_content, P
                     "before_layer_gcode", "layer_gcode",
                     "toolchange_gcode",   "start_filament_gcode",
                     "end_filament_gcode", "template_custom_gcode",
+                    "change_extrusion_role_gcode",
                 };
                 if (pf_gcode_keys.count(pf_key) > 0)
                     pf_value = translate_gcode(pf_value, profile_name, pf_key, result.gcode_warnings);
@@ -714,6 +716,31 @@ int OrcaConfigImporter::parse_and_map_profile(const std::string &json_content, P
                 BOOST_LOG_TRIVIAL(warning) << "OrcaImporter: Failed to set " << pf_key << "=" << pf_value << " in "
                                            << profile_name << ": " << e.what();
             }
+        }
+
+        // Orca's per-feature jerk (= Klipper square corner velocity) is only used when default_jerk > 0.
+        // Imported as preFlight's per-feature SCV, so clear them when Orca had jerk control off.
+        if (preset_type == Preset::TYPE_PRINT && j.contains("default_jerk"))
+        {
+            const auto &dj = (j["default_jerk"].is_array() && !j["default_jerk"].empty()) ? j["default_jerk"][0]
+                                                                                           : j["default_jerk"];
+            double default_jerk = 0.;
+            try
+            {
+                default_jerk = dj.is_number() ? dj.get<double>() : (dj.is_string() ? std::stod(dj.get<std::string>()) : 0.);
+            }
+            catch (const std::exception &)
+            {
+                default_jerk = 0.;
+            }
+            if (default_jerk <= 0.)
+                for (const char *key :
+                     {"default_square_corner_velocity", "external_perimeter_square_corner_velocity",
+                      "perimeter_square_corner_velocity", "top_solid_infill_square_corner_velocity",
+                      "infill_square_corner_velocity", "first_layer_square_corner_velocity",
+                      "travel_square_corner_velocity"})
+                    if (out_config.has(key))
+                        out_config.set_deserialize_strict(key, "0");
         }
 
         // Resolve acceleration percentages: Orca allows values like "50%" meaning
@@ -742,9 +769,11 @@ int OrcaConfigImporter::parse_and_map_profile(const std::string &json_content, P
                 if (!j.contains(orca_key))
                     continue;
 
+                // Newer Orca stores these per extruder variant as an array (["150%"]): use the first.
+                const auto &val = (j[orca_key].is_array() && !j[orca_key].empty()) ? j[orca_key][0] : j[orca_key];
                 std::string raw;
-                if (j[orca_key].is_string())
-                    raw = j[orca_key].get<std::string>();
+                if (val.is_string())
+                    raw = val.get<std::string>();
                 else
                     continue;
 

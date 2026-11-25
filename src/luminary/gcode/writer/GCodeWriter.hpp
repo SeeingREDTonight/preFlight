@@ -76,6 +76,9 @@ public:
     {
         return set_acceleration_internal(Acceleration::Travel, acceleration);
     }
+    // Klipper: SET_VELOCITY_LIMIT SQUARE_CORNER_VELOCITY=<scv> when it changes. Other flavors, or
+    // scv <= 0, emit nothing.
+    std::string set_square_corner_velocity(double scv);
     std::string reset_e(bool force = false);
     std::string update_progress(unsigned int num, unsigned int tot, bool allow_100 = false) const;
     // return false if this extruder was already selected
@@ -170,6 +173,7 @@ private:
     unsigned int m_last_acceleration = (unsigned int) (-1);
     unsigned int m_last_travel_acceleration =
         (unsigned int) (-1); // only used for flavors supporting separate print/travel acc
+    double m_last_square_corner_velocity = -1.; // Klipper SCV last emitted, -1 = none yet
     // Limit for setting the acceleration, to respect the machine limits set for the Marlin firmware.
     // If set to zero, the limit is not in action.
     unsigned int m_max_acceleration;

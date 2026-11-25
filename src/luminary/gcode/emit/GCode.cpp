@@ -616,6 +616,8 @@ static std::vector<std::pair<std::string, std::string>> validate_custom_gcode(co
     if (ret.size() < MAX_TAGS_COUNT)
         check(_u8L("After layer change G-code"), config.layer_gcode.value);
     if (ret.size() < MAX_TAGS_COUNT)
+        check(_u8L("Change extrusion role G-code"), config.change_extrusion_role_gcode.value);
+    if (ret.size() < MAX_TAGS_COUNT)
         check(_u8L("Tool change G-code"), config.toolchange_gcode.value);
     if (ret.size() < MAX_TAGS_COUNT)
         check(_u8L("Between objects G-code (for sequential printing)"), config.between_objects_gcode.value);
@@ -3678,6 +3680,7 @@ std::string GCodeGenerator::extrude_interlocking_gap_fills(const LayerRegion *la
             // Emit role comment for G-code viewer
             GCodeExtrusionRole gcode_role = extrusion_role_to_gcode_extrusion_role(
                 ExtrusionRole::InterlockingPerimeter);
+            gcode += this->change_extrusion_role_gcode(gcode_role);
             if (gcode_role != m_last_processor_extrusion_role)
             {
                 m_last_processor_extrusion_role = gcode_role;
@@ -5382,6 +5385,78 @@ double cap_speed(double speed, const FullPrintConfig &config, int extruder_id, c
     return speed;
 }
 
+// OrcaSlicer's [extrusion_role] names, so role-change G-code written for Orca (e.g. per line type
+// pressure advance macros) works unchanged. preFlight-only roles report as their closest Orca role.
+static const char *orca_extrusion_role_name(GCodeExtrusionRole role)
+{
+    switch (role)
+    {
+    case GCodeExtrusionRole::Perimeter:
+    case GCodeExtrusionRole::InterlockingPerimeter:
+        return "Perimeter";
+    case GCodeExtrusionRole::ExternalPerimeter:
+        return "ExternalPerimeter";
+    case GCodeExtrusionRole::OverhangPerimeter:
+        return "OverhangPerimeter";
+    case GCodeExtrusionRole::InternalInfill:
+        return "InternalInfill";
+    case GCodeExtrusionRole::SolidInfill:
+    case GCodeExtrusionRole::Serpentine:
+        return "SolidInfill";
+    case GCodeExtrusionRole::TopSolidInfill:
+        return "TopSolidInfill";
+    case GCodeExtrusionRole::BridgeInfill:
+    case GCodeExtrusionRole::SerpentineOverhang:
+        return "BridgeInfill";
+    case GCodeExtrusionRole::GapFill:
+        return "GapFill";
+    case GCodeExtrusionRole::Ironing:
+        return "Ironing";
+    case GCodeExtrusionRole::Skirt:
+        return "Skirt";
+    case GCodeExtrusionRole::SupportMaterial:
+        return "SupportMaterial";
+    case GCodeExtrusionRole::SupportMaterialInterface:
+        return "SupportMaterialInterface";
+    case GCodeExtrusionRole::WipeTower:
+        return "WipeTower";
+    default:
+        return nullptr;
+    }
+}
+
+double GCodeGenerator::square_corner_velocity_for(double fixed, double acceleration) const
+{
+    if (fixed > 0.)
+        return fixed;
+    if (m_config.square_corner_velocity_accel_divisor.value > 0. && acceleration > 0.)
+        return acceleration / m_config.square_corner_velocity_accel_divisor.value;
+    return m_config.default_square_corner_velocity.value; // 0 = leave the printer's SCV alone
+}
+
+std::string GCodeGenerator::change_extrusion_role_gcode(GCodeExtrusionRole role)
+{
+    const std::string &templ = m_config.change_extrusion_role_gcode.value;
+    if (templ.empty())
+        return {};
+    const char *name = orca_extrusion_role_name(role);
+    if (name == nullptr || m_last_role_change_name == name)
+        return {};
+
+    DynamicConfig config;
+    config.set_key_value("extrusion_role", new ConfigOptionString(name));
+    config.set_key_value("last_extrusion_role", new ConfigOptionString(m_last_role_change_name));
+    config.set_key_value("layer_num", new ConfigOptionInt(std::max(m_layer_index, 0)));
+    config.set_key_value("layer_z", new ConfigOptionFloat(m_layer == nullptr ? m_last_height : m_layer->print_z));
+    m_last_role_change_name = name;
+
+    std::string out = this->placeholder_parser_process("change_extrusion_role_gcode", templ,
+                                                       m_writer.extruder()->id(), &config);
+    if (!out.empty() && out.back() != '\n')
+        out += '\n';
+    return out;
+}
+
 std::string GCodeGenerator::_extrude(const ExtrusionAttributes &path_attr, const Geometry::ArcWelder::Path &path,
                                      const std::string_view description, double speed,
                                      const EmitModifiers &emit_modifiers)
@@ -5435,6 +5510,7 @@ std::string GCodeGenerator::_extrude(const ExtrusionAttributes &path_attr, const
     }
 
     // adjust acceleration
+    double feature_acceleration = 0.;
     if (m_config.default_acceleration.value > 0)
     {
         double acceleration;
@@ -5475,6 +5551,32 @@ std::string GCodeGenerator::_extrude(const ExtrusionAttributes &path_attr, const
             acceleration = m_config.default_acceleration.value;
         }
         gcode += m_writer.set_print_acceleration((unsigned int) floor(acceleration + 0.5));
+        feature_acceleration = acceleration;
+    }
+
+    // Klipper square corner velocity per feature, same precedence as the acceleration above.
+    if (this->config().gcode_flavor == gcfKlipper)
+    {
+        double fixed = 0.;
+        if (this->on_first_layer() && m_config.first_layer_square_corner_velocity.value > 0)
+            fixed = m_config.first_layer_square_corner_velocity.value;
+        else if (m_config.bridge_square_corner_velocity.value > 0 && path_attr.role.is_bridge())
+            fixed = m_config.bridge_square_corner_velocity.value;
+        else if (m_config.top_solid_infill_square_corner_velocity.value > 0 &&
+                 path_attr.role == ExtrusionRole::TopSolidInfill)
+            fixed = m_config.top_solid_infill_square_corner_velocity.value;
+        else if (m_config.solid_infill_square_corner_velocity.value > 0 && path_attr.role.is_solid_infill())
+            fixed = m_config.solid_infill_square_corner_velocity.value;
+        else if (m_config.infill_square_corner_velocity.value > 0 && path_attr.role.is_infill())
+            fixed = m_config.infill_square_corner_velocity.value;
+        else if (m_config.external_perimeter_square_corner_velocity.value > 0 &&
+                 path_attr.role.is_external_perimeter())
+            fixed = m_config.external_perimeter_square_corner_velocity.value;
+        else if (m_config.perimeter_square_corner_velocity.value > 0 && path_attr.role.is_perimeter())
+            fixed = m_config.perimeter_square_corner_velocity.value;
+        if (feature_acceleration <= 0.)
+            feature_acceleration = m_config.machine_klipper_max_accel.value;
+        gcode += m_writer.set_square_corner_velocity(this->square_corner_velocity_for(fixed, feature_acceleration));
     }
 
     // calculate extrusion length per distance unit
@@ -6049,6 +6151,9 @@ std::string GCodeGenerator::_extrude(const ExtrusionAttributes &path_attr, const
     if (!path_has_movement)
         return gcode;
 
+    // User G-code for a change of extrusion role (line type), OrcaSlicer compatible.
+    gcode += this->change_extrusion_role_gcode(extrusion_role_to_gcode_extrusion_role(path_attr.role));
+
     // extrude arc or line
     if (m_enable_extrusion_role_markers)
     {
@@ -6556,8 +6661,15 @@ std::string GCodeGenerator::generate_travel_gcode(const Points3 &travel, const s
     std::string gcode;
     // Generate G-code for the travel move.
     // Use G1 because we rely on paths being straight (G0 may make round paths).
-    gcode += this->m_writer.set_travel_acceleration(
-        use_short_distance_acceleration() ? travel_short_distance_acceleration : travel_acceleration);
+    const unsigned this_travel_acceleration = use_short_distance_acceleration() ? travel_short_distance_acceleration
+                                                                                 : travel_acceleration;
+    gcode += this->m_writer.set_travel_acceleration(this_travel_acceleration);
+    if (config().gcode_flavor == gcfKlipper)
+        gcode += m_writer.set_square_corner_velocity(this->square_corner_velocity_for(
+            m_config.travel_square_corner_velocity.value,
+            this_travel_acceleration > 0 ? double(this_travel_acceleration)
+            : travel_acceleration > 0    ? double(travel_acceleration)
+                                         : m_config.machine_klipper_max_accel.value));
 
     bool already_inserted{false};
     for (std::size_t i{0}; i < travel.size(); ++i)

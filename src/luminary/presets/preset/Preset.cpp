@@ -572,6 +572,10 @@ static std::vector<std::string> s_Preset_machine_limits_options{
     "machine_klipper_max_accel",
     "machine_klipper_square_corner_velocity",
     "machine_klipper_minimum_cruise_ratio",
+    "machine_klipper_limited_corexy",
+    "machine_klipper_max_x_accel",
+    "machine_klipper_max_y_accel",
+    "machine_klipper_scale_xy_accel",
     "machine_time_compensation",
 };
 

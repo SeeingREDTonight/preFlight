@@ -198,7 +198,9 @@ static const t_config_enum_values s_keys_map_InfillPattern{{"rectilinear", ipRec
                                                            {"adaptivecubic", ipAdaptiveCubic},
                                                            {"supportcubic", ipSupportCubic},
                                                            {"lightning", ipLightning},
-                                                           {"zigzag", ipZigZag}};
+                                                           {"zigzag", ipZigZag},
+                                                           {"tpmsd", ipTpmsD},
+                                                           {"tpmsfk", ipTpmsFK}};
 CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(InfillPattern)
 
 static const t_config_enum_values s_keys_map_IroningType{{"top", int(IroningType::TopSurfaces)},
@@ -706,6 +708,22 @@ void PrintConfigDef::init_fff_params()
     def->tooltip = L("This custom code is inserted at every layer change, right before the Z move. "
                      "Note that you can use placeholder variables for all preFlight settings as well "
                      "as [layer_num] and [layer_z].");
+    def->multiline = true;
+    def->full_width = true;
+    def->height = 5;
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionString(""));
+
+    def = this->add("change_extrusion_role_gcode", coString);
+    def->label = L("Change extrusion role G-code");
+    def->tooltip = L("This custom code is inserted every time the extrusion role (line type) changes, right "
+                     "before the new feature's first extrusion. [extrusion_role] is the new role and "
+                     "[last_extrusion_role] the previous one, named as in OrcaSlicer: Perimeter, "
+                     "ExternalPerimeter, OverhangPerimeter, InternalInfill, SolidInfill, TopSolidInfill, "
+                     "BridgeInfill, GapFill, Ironing, Skirt, SupportMaterial, SupportMaterialInterface, WipeTower. "
+                     "preFlight's interlocking perimeters report as Perimeter, serpentine fill as SolidInfill "
+                     "and serpentine overhangs as BridgeInfill. [layer_num] (zero based) and [layer_z] are "
+                     "available as well.");
     def->multiline = true;
     def->full_width = true;
     def->height = 5;
@@ -1977,6 +1995,8 @@ void PrintConfigDef::init_fff_params()
         {"honeycomb", L("Honeycomb")},
         {"3dhoneycomb", L("3D Honeycomb")},
         {"gyroid", L("Gyroid")},
+        {"tpmsd", L("TPMS-D")},
+        {"tpmsfk", L("TPMS-FK")},
         {"hilbertcurve", L("Hilbert Curve")},
         {"archimedeanchords", L("Archimedean Chords")},
         {"octagramspiral", L("Octagram Spiral")},
@@ -2459,6 +2479,117 @@ void PrintConfigDef::init_fff_params()
     def->sidetext = L("mm/s²");
     def->min = 0;
     def->mode = comExpert;
+    def->set_default_value(new ConfigOptionFloat(0));
+
+    def = this->add("square_corner_velocity_accel_divisor", coFloat);
+    def->label = L("SCV from acceleration: divisor");
+    def->category = L("Speed");
+    def->tooltip = L("Klipper only. Sets the square corner velocity of each feature to its acceleration "
+                     "divided by this value (1000: a 10000 mm/s² feature gets SCV 10), sent with "
+                     "SET_VELOCITY_LIMIT SQUARE_CORNER_VELOCITY when it changes. A feature with its own "
+                     "square corner velocity below uses that instead. Set to zero to use the Default "
+                     "value instead of the formula.");
+    def->min = 0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(0));
+
+    def = this->add("default_square_corner_velocity", coFloat);
+    def->label = L("Default");
+    def->category = L("Speed");
+    def->tooltip = L("Klipper only. Square corner velocity for everything without its own value, sent with SET_VELOCITY_LIMIT "
+                     "SQUARE_CORNER_VELOCITY. Used for features without their own value when the divisor is zero. Set to zero for automatic "
+                     "(acceleration / divisor, or the Default value).");
+    def->sidetext = L("mm/s");
+    def->min = 0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(0));
+
+    def = this->add("external_perimeter_square_corner_velocity", coFloat);
+    def->label = L("External perimeters");
+    def->category = L("Speed");
+    def->tooltip = L("Klipper only. Square corner velocity for external perimeters, sent with SET_VELOCITY_LIMIT "
+                     "SQUARE_CORNER_VELOCITY. Set to zero for automatic "
+                     "(acceleration / divisor, or the Default value).");
+    def->sidetext = L("mm/s");
+    def->min = 0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(0));
+
+    def = this->add("perimeter_square_corner_velocity", coFloat);
+    def->label = L("Perimeters");
+    def->category = L("Speed");
+    def->tooltip = L("Klipper only. Square corner velocity for perimeters, sent with SET_VELOCITY_LIMIT "
+                     "SQUARE_CORNER_VELOCITY. Set to zero for automatic "
+                     "(acceleration / divisor, or the Default value).");
+    def->sidetext = L("mm/s");
+    def->min = 0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(0));
+
+    def = this->add("top_solid_infill_square_corner_velocity", coFloat);
+    def->label = L("Top solid infill");
+    def->category = L("Speed");
+    def->tooltip = L("Klipper only. Square corner velocity for top solid infill, sent with SET_VELOCITY_LIMIT "
+                     "SQUARE_CORNER_VELOCITY. Set to zero for automatic "
+                     "(acceleration / divisor, or the Default value).");
+    def->sidetext = L("mm/s");
+    def->min = 0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(0));
+
+    def = this->add("solid_infill_square_corner_velocity", coFloat);
+    def->label = L("Solid infill");
+    def->category = L("Speed");
+    def->tooltip = L("Klipper only. Square corner velocity for solid infill, sent with SET_VELOCITY_LIMIT "
+                     "SQUARE_CORNER_VELOCITY. Set to zero for automatic "
+                     "(acceleration / divisor, or the Default value).");
+    def->sidetext = L("mm/s");
+    def->min = 0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(0));
+
+    def = this->add("infill_square_corner_velocity", coFloat);
+    def->label = L("Infill");
+    def->category = L("Speed");
+    def->tooltip = L("Klipper only. Square corner velocity for sparse infill, sent with SET_VELOCITY_LIMIT "
+                     "SQUARE_CORNER_VELOCITY. Set to zero for automatic "
+                     "(acceleration / divisor, or the Default value).");
+    def->sidetext = L("mm/s");
+    def->min = 0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(0));
+
+    def = this->add("bridge_square_corner_velocity", coFloat);
+    def->label = L("Bridges");
+    def->category = L("Speed");
+    def->tooltip = L("Klipper only. Square corner velocity for bridges, sent with SET_VELOCITY_LIMIT "
+                     "SQUARE_CORNER_VELOCITY. Set to zero for automatic "
+                     "(acceleration / divisor, or the Default value).");
+    def->sidetext = L("mm/s");
+    def->min = 0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(0));
+
+    def = this->add("first_layer_square_corner_velocity", coFloat);
+    def->label = L("First layer");
+    def->category = L("Speed");
+    def->tooltip = L("Klipper only. Square corner velocity for the first layer, sent with SET_VELOCITY_LIMIT "
+                     "SQUARE_CORNER_VELOCITY. Set to zero for automatic "
+                     "(acceleration / divisor, or the Default value).");
+    def->sidetext = L("mm/s");
+    def->min = 0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(0));
+
+    def = this->add("travel_square_corner_velocity", coFloat);
+    def->label = L("Travel");
+    def->category = L("Speed");
+    def->tooltip = L("Klipper only. Square corner velocity for travel moves, sent with SET_VELOCITY_LIMIT "
+                     "SQUARE_CORNER_VELOCITY. Set to zero for automatic (travel acceleration / divisor, or "
+                     "the Default value).");
+    def->sidetext = L("mm/s");
+    def->min = 0;
+    def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionFloat(0));
 
     def = this->add("infill_every_layers", coInt);
@@ -3040,6 +3171,48 @@ void PrintConfigDef::init_fff_params()
     def->max = 0.99;
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionFloat(0.5));
+
+    def = this->add("machine_klipper_limited_corexy", coBool);
+    def->label = L("Limited CoreXY (Kalico)");
+    def->category = L("Machine limits");
+    def->tooltip = L("Enable if your printer.cfg [printer] section uses Kalico's\n"
+                     "kinematics: limited_corexy.\n\n"
+                     "The time estimate then limits each move's acceleration by its\n"
+                     "direction, using max_x_accel and max_y_accel, and its speed by\n"
+                     "the motor speed limit on diagonals, as the printer does.\n"
+                     "The G-code is not changed.");
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionBool(false));
+
+    def = this->add("machine_klipper_max_x_accel", coFloat);
+    def->label = L("Max X acceleration");
+    def->category = L("Machine limits");
+    def->tooltip = L("max_x_accel from your Kalico printer.cfg [printer] section\n"
+                     "(limited_corexy kinematics).");
+    def->sidetext = L("mm/s²");
+    def->min = 0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(0));
+
+    def = this->add("machine_klipper_max_y_accel", coFloat);
+    def->label = L("Max Y acceleration");
+    def->category = L("Machine limits");
+    def->tooltip = L("max_y_accel from your Kalico printer.cfg [printer] section\n"
+                     "(limited_corexy kinematics).");
+    def->sidetext = L("mm/s²");
+    def->min = 0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(0));
+
+    def = this->add("machine_klipper_scale_xy_accel", coBool);
+    def->label = L("Scale XY acceleration");
+    def->category = L("Machine limits");
+    def->tooltip = L("scale_xy_accel from your Kalico printer.cfg [printer] section.\n\n"
+                     "Enabled: max_x_accel / max_y_accel scale with the acceleration\n"
+                     "the G-code sets (per feature).\n"
+                     "Disabled: they are absolute limits.");
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionBool(true));
 
     def = this->add("machine_time_compensation", coPercent);
     def->label = L("Real-World Compensation");
@@ -5686,6 +5859,10 @@ void PrintConfigDef::init_scope_reasons()
                                "machine_klipper_max_accel",
                                "machine_klipper_square_corner_velocity",
                                "machine_klipper_minimum_cruise_ratio",
+                               "machine_klipper_limited_corexy",
+                               "machine_klipper_max_x_accel",
+                               "machine_klipper_max_y_accel",
+                               "machine_klipper_scale_xy_accel",
                                "machine_time_compensation",
                                "retract_before_travel",
                                "retract_layer_change",
@@ -5707,6 +5884,7 @@ void PrintConfigDef::init_scope_reasons()
                                "retract_restart_extra_toolchange",
                                "retract_speed",
                                "before_layer_gcode",
+                               "change_extrusion_role_gcode",
                                "between_objects_gcode",
                                "end_gcode",
                                "layer_gcode",
@@ -5787,6 +5965,7 @@ void PrintConfigDef::init_scope_reasons()
         {"max_volumetric_extrusion_rate_slope_positive", "max_volumetric_extrusion_rate_slope_negative"});
     // Travels connect objects
     set(ScopeReason::Travel, {"first_layer_travel_speed", "travel_acceleration", "travel_short_distance_acceleration",
+                              "travel_square_corner_velocity",
                               "travel_speed", "travel_speed_z"});
     // Every object on a layer shares the layer time
     set(ScopeReason::LayerTime,
@@ -7389,6 +7568,7 @@ static std::map<t_custom_gcode_key, t_config_option_keys> s_CustomGcodeSpecificP
     {"end_gcode", {"layer_num", "layer_z", "max_layer_z", "filament_extruder_id"}},
     {"before_layer_gcode", {"layer_num", "layer_z", "max_layer_z"}},
     {"layer_gcode", {"layer_num", "layer_z", "max_layer_z"}},
+    {"change_extrusion_role_gcode", {"extrusion_role", "last_extrusion_role", "layer_num", "layer_z"}},
     {"toolchange_gcode", {"layer_num", "layer_z", "max_layer_z", "previous_extruder", "next_extruder", "toolchange_z"}},
     {"color_change_gcode", {"color_change_extruder"}},
     {"pause_print_gcode", {"color_change_extruder"}},
@@ -7433,6 +7613,15 @@ CustomGcodeSpecificConfigDef::CustomGcodeSpecificConfigDef()
     def->label = L("Toolchange Z");
     def->tooltip = L(
         "Height above the print bed when the toolchange takes place. Usually the same as layer_z, but can be different.");
+
+    def = this->add("extrusion_role", coString);
+    def->label = L("Extrusion role");
+    def->tooltip = L("The extrusion role (line type) being started, named as in OrcaSlicer "
+                     "(Perimeter, ExternalPerimeter, InternalInfill, ...).");
+
+    def = this->add("last_extrusion_role", coString);
+    def->label = L("Last extrusion role");
+    def->tooltip = L("The extrusion role (line type) before this change, empty for the first one.");
 
     def = this->add("color_change_extruder", coInt);
     // TRN: This is a label in custom g-code editor dialog, belonging to color_change_extruder. Denoted index of the extruder for which color change is performed.

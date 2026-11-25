@@ -209,6 +209,7 @@ void GCodeProcessor::TimeMachine::State::reset()
     dir_x = 0.0f;
     dir_y = 0.0f;
     has_direction = false;
+    acceleration = 0.0f;
 }
 
 void GCodeProcessor::TimeMachine::CustomGCodeTime::reset()
@@ -357,6 +358,12 @@ static void apply_klipper_minimum_cruise_ratio(std::vector<GCodeProcessor::TimeB
     const size_t n = blocks.size();
     const float one_minus_mcr = 1.0f - mcr;
     n_apply = std::min(n_apply, n);
+    // Kalico limited_corexy: the smoothing accel is min(base * (1 - mcr), scaled accel).
+    auto mcr_accel = [one_minus_mcr](const GCodeProcessor::TimeBlock &b)
+    {
+        return b.base_acceleration > 0.0f ? std::min(b.base_acceleration * one_minus_mcr, b.acceleration)
+                                          : b.acceleration * one_minus_mcr;
+    };
 
     // Forward-propagate the reduced-accel entry^2 ceiling (Klipper max_mcr_start_v2), bounded by each
     // block's junction limit (max_entry_speed^2 == Klipper max_start_v2). The batch head is seeded
@@ -366,7 +373,7 @@ static void apply_klipper_minimum_cruise_ratio(std::vector<GCodeProcessor::TimeB
     max_mcr_start_v2[0] = blocks[0].max_entry_speed * blocks[0].max_entry_speed;
     for (size_t i = 1; i < n; ++i)
     {
-        const float mcr_delta_prev = 2.0f * (blocks[i - 1].acceleration * one_minus_mcr) * blocks[i - 1].distance;
+        const float mcr_delta_prev = 2.0f * mcr_accel(blocks[i - 1]) * blocks[i - 1].distance;
         const float max_start_v2 = blocks[i].max_entry_speed * blocks[i].max_entry_speed;
         max_mcr_start_v2[i] = std::min(max_start_v2, max_mcr_start_v2[i - 1] + mcr_delta_prev);
     }
@@ -384,7 +391,7 @@ static void apply_klipper_minimum_cruise_ratio(std::vector<GCodeProcessor::TimeB
         const float accel = blocks[k].acceleration;
         const float dist = blocks[k].distance;
         const float delta_v2 = 2.0f * accel * dist;
-        const float mcr_delta_v2 = 2.0f * (accel * one_minus_mcr) * dist;
+        const float mcr_delta_v2 = 2.0f * mcr_accel(blocks[k]) * dist;
         const float max_cruise_v2 = blocks[k].feedrate_profile.cruise * blocks[k].feedrate_profile.cruise;
         const float start_v2 = blocks[k].feedrate_profile.entry * blocks[k].feedrate_profile.entry;
         const float reachable_start_v2 = next_end_v2 + delta_v2;
@@ -1495,6 +1502,15 @@ void GCodeProcessor::apply_config(const DynamicPrintConfig &config)
                 m_klipper_minimum_cruise_ratio = std::clamp(static_cast<float>(klipper_mcr->value), 0.0f, 0.99f);
 
             apply_klipper_isotropic_limits(vel, accel, m_klipper_scv);
+
+            const ConfigOptionBool *lcxy = config.option<ConfigOptionBool>("machine_klipper_limited_corexy");
+            const ConfigOptionFloat *lcxy_x = config.option<ConfigOptionFloat>("machine_klipper_max_x_accel");
+            const ConfigOptionFloat *lcxy_y = config.option<ConfigOptionFloat>("machine_klipper_max_y_accel");
+            const ConfigOptionBool *lcxy_scale = config.option<ConfigOptionBool>("machine_klipper_scale_xy_accel");
+            load_klipper_limited_corexy(lcxy != nullptr && lcxy->value,
+                                        lcxy_x != nullptr ? static_cast<float>(lcxy_x->value) : 0.0f,
+                                        lcxy_y != nullptr ? static_cast<float>(lcxy_y->value) : 0.0f,
+                                        lcxy_scale == nullptr || lcxy_scale->value);
         }
     }
 
@@ -1741,6 +1757,21 @@ void GCodeProcessor::parse_klipper_limits_from_config(const PrintConfig &config)
     m_klipper_minimum_cruise_ratio = std::clamp(mcr, 0.0f, 0.99f);
 
     apply_klipper_isotropic_limits(max_velocity, max_accel, scv);
+
+    load_klipper_limited_corexy(config.machine_klipper_limited_corexy.value,
+                                static_cast<float>(config.machine_klipper_max_x_accel.value),
+                                static_cast<float>(config.machine_klipper_max_y_accel.value),
+                                config.machine_klipper_scale_xy_accel.value);
+}
+
+void GCodeProcessor::load_klipper_limited_corexy(bool enabled, float max_x_accel, float max_y_accel,
+                                                 bool scale_xy_accel)
+{
+    // Only meaningful with both limits set; otherwise behave like plain corexy.
+    m_klipper_limited_corexy = enabled && max_x_accel > 0.0f && max_y_accel > 0.0f;
+    m_klipper_max_x_accel = max_x_accel;
+    m_klipper_max_y_accel = max_y_accel;
+    m_klipper_scale_xy_accel = scale_xy_accel;
 }
 
 void GCodeProcessor::process_SET_VELOCITY_LIMIT(const std::string &line)
@@ -1833,6 +1864,10 @@ void GCodeProcessor::reset()
     m_rrf_jerk_affected_blocks = 0;
     m_klipper_scv = 5.0f;
     m_klipper_minimum_cruise_ratio = 0.5f;
+    m_klipper_limited_corexy = false;
+    m_klipper_max_x_accel = 0.0f;
+    m_klipper_max_y_accel = 0.0f;
+    m_klipper_scale_xy_accel = true;
 
     m_time_compensation = 0.0f;
 
@@ -5147,6 +5182,19 @@ void GCodeProcessor::process_G1(const std::array<std::optional<double>, 4> &axes
             }
         }
 
+        // Kalico limited_corexy: max_velocity limits the A/B motors, so the cartesian speed limit is
+        // max_velocity * move_d / max(|dx + dy|, |dx - dy|) (lower on diagonals).
+        const bool lcxy_move = m_flavor == gcfKlipper && m_klipper_limited_corexy && move_has_direction;
+        if (lcxy_move)
+        {
+            const float ab_linf = std::max(std::abs(delta_pos[X] + delta_pos[Y]), std::abs(delta_pos[X] - delta_pos[Y]));
+            const float max_velocity =
+                get_axis_max_feedrate(static_cast<PrintEstimatedStatistics::ETimeMode>(i), X);
+            if (ab_linf > 0.0f && max_velocity > 0.0f && curr.feedrate > 0.0f)
+                min_feedrate_factor =
+                    std::min(min_feedrate_factor, max_velocity * distance / ab_linf / curr.feedrate);
+        }
+
         block.feedrate_profile.cruise = min_feedrate_factor * curr.feedrate;
 
         if (min_feedrate_factor < 1.0f)
@@ -5176,7 +5224,30 @@ void GCodeProcessor::process_G1(const std::array<std::optional<double>, 4> &axes
                 acceleration = axis_max_acceleration / scale;
         }
 
+        // Kalico limited_corexy (LimitedCoreXYKinematics.check_move): per-direction XY acceleration.
+        // The junction deviation stays derived from the commanded (M204/SET_VELOCITY_LIMIT) accel,
+        // so cornering scales with the limited accel exactly as on the printer.
+        if (lcxy_move)
+        {
+            const float x_o_a = delta_pos[X] / m_klipper_max_x_accel;
+            const float y_o_a = delta_pos[Y] / m_klipper_max_y_accel;
+            const float denom = std::max(std::abs(x_o_a + y_o_a), std::abs(x_o_a - y_o_a));
+            if (denom > 0.0f)
+            {
+                const float limited = m_klipper_scale_xy_accel
+                                          ? acceleration * distance /
+                                                (denom * std::max(m_klipper_max_x_accel, m_klipper_max_y_accel))
+                                          : distance / denom;
+                if (limited < acceleration)
+                {
+                    block.base_acceleration = acceleration;
+                    acceleration = limited;
+                }
+            }
+        }
+
         block.acceleration = acceleration;
+        curr.acceleration = acceleration;
 
         // calculates block exit feedrate
         curr.safe_feedrate = block.feedrate_profile.cruise;
@@ -5218,8 +5289,13 @@ void GCodeProcessor::process_G1(const std::array<std::optional<double>, 4> &axes
                 if (junction_deviation > 0.0f)
                 {
                     // Use junction deviation algorithm (Marlin M205 J)
-                    // Get acceleration for the current move
-                    const float acceleration = get_acceleration(static_cast<PrintEstimatedStatistics::ETimeMode>(i));
+                    // Get acceleration for the current move. With Kalico limited_corexy each move has
+                    // its own limited accel and the junction takes the lower of the two (Klipper
+                    // calc_junction: min(jd * accel, prev_jd * prev_accel)).
+                    const float acceleration =
+                        (lcxy_move && prev.acceleration > 0.0f)
+                            ? std::min(curr.acceleration, prev.acceleration)
+                            : get_acceleration(static_cast<PrintEstimatedStatistics::ETimeMode>(i));
                     corner_speed = calculate_corner_speed_from_junction_deviation(junction_deviation, acceleration,
                                                                                   prev.dir_x, prev.dir_y, curr.dir_x,
                                                                                   curr.dir_y);
