@@ -567,6 +567,8 @@ class TabFilament : public Tab
     int m_active_extruder{0};
     ogStaticText *m_volumetric_speed_description_line{nullptr};
     ogStaticText *m_cooling_description_line{nullptr};
+    // The fan curve preview on the Cooling page, rebuilt with the page.
+    class FanCurveChart *m_fan_curve_chart{nullptr};
 
     void create_line_with_near_label_widget(ConfigOptionsGroupShp optgroup, const std::string &opt_key,
                                             int opt_index = 0);

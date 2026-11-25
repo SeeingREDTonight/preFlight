@@ -329,6 +329,13 @@ static const t_config_enum_values s_keys_map_CoolingSlowdownLogicType{
 };
 CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(CoolingSlowdownLogicType)
 
+static const t_config_enum_values s_keys_map_FanControlMode{
+    {"legacy", int(FanControlMode::Legacy)},
+    {"curve", int(FanControlMode::Curve)},
+    {"breakpoints", int(FanControlMode::Breakpoints)},
+};
+CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(FanControlMode)
+
 static const t_config_enum_values s_keys_map_InterlockFlowDetection{
     {"precise", int(ifdPrecise)},
     {"standard", int(ifdStandard)},
@@ -1521,6 +1528,106 @@ void PrintConfigDef::init_fff_params()
     def->mode = comExpert;
     def->set_default_value(new ConfigOptionInts{60});
 
+    def = this->add("fan_control_mode", coEnums);
+    def->label = L("Fan control");
+    def->tooltip = L("How the automatic cooling picks the fan speed from the layer time.\n"
+                     "'Min/max (stock)' interpolates between the minimum and maximum fan speed from the "
+                     "'fan below' to the 'slowdown below' layer time, using the layer time after slowdown.\n"
+                     "'Curve' raises the fan from the minimum to the maximum speed between a start and a full-speed "
+                     "layer time, shaped on a logarithmic time axis, using the layer time before slowdown.\n"
+                     "'Breakpoints' sets the fan from up to six layer time / fan speed rows, interpolated on a "
+                     "logarithmic time axis, using the layer time before slowdown.");
+    def->set_enum<FanControlMode>(std::initializer_list<std::pair<std::string_view, std::string_view>>{
+        {"legacy", L("Min/max (stock)")},
+        {"curve", L("Curve")},
+        {"breakpoints", L("Breakpoints")},
+    });
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionEnums<FanControlMode>{FanControlMode::Legacy});
+
+    def = this->add("fan_curve_start_time", coFloats);
+    def->label = L("Fan starts below layer time");
+    def->tooltip = L("Layers printing faster than this (before any slowdown) turn the fan on at the minimum fan speed.");
+    def->sidetext = L("s");
+    def->min = 0.01;
+    def->max = 1000;
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionFloats{3.});
+
+    def = this->add("fan_curve_full_time", coFloats);
+    def->label = L("Maximum fan at layer time");
+    def->tooltip = L("Layers printing this fast or faster (before any slowdown) get the maximum fan speed. "
+                     "Unlike the stock logic this is independent of the slowdown threshold, so the fan keeps "
+                     "rising as layers keep getting shorter.");
+    def->sidetext = L("s");
+    def->min = 0.001;
+    def->max = 1000;
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionFloats{0.25});
+
+    def = this->add("fan_curve_shape", coFloats);
+    def->label = L("Curve shape");
+    def->tooltip = L("Exponent of the curve between the start and full-speed layer times. 1 is a straight line on a "
+                     "logarithmic time axis (the same fan increase every time the layer time halves). Above 1 the fan "
+                     "stays low longer and rises steeply near the full-speed time; below 1 it rises early and levels off.");
+    def->min = 0.1;
+    def->max = 10;
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionFloats{1.});
+
+    {
+        const double bp_times[6] = {3., 1., 0.4, 0.15, 0., 0.};
+        const int bp_speeds[6] = {1, 12, 18, 30, 0, 0};
+        for (int i = 0; i < 6; ++i)
+        {
+            const std::string n = std::to_string(i);
+            def = this->add("fan_curve_time_" + n, coFloats);
+            def->label = L("Layer time");
+            def->full_label = std::string(L("Fan breakpoint layer time")) + " " + std::to_string(i + 1);
+            def->tooltip = L("Layer time (before any slowdown) of this breakpoint. Set to 0 to leave the row unused. "
+                             "Rows may be in any order. Layers slower than the slowest row get its fan speed, layers "
+                             "faster than the fastest row get its fan speed.");
+            def->sidetext = L("s");
+            def->min = 0;
+            def->max = 1000;
+            def->mode = comExpert;
+            def->set_default_value(new ConfigOptionFloats{bp_times[i]});
+
+            def = this->add("fan_curve_speed_" + n, coInts);
+            def->label = L("Fan speed");
+            def->full_label = std::string(L("Fan breakpoint speed")) + " " + std::to_string(i + 1);
+            def->tooltip = L("Fan speed at this breakpoint's layer time.");
+            def->sidetext = L("%");
+            def->min = 0;
+            def->max = 100;
+            def->mode = comExpert;
+            def->set_default_value(new ConfigOptionInts{bp_speeds[i]});
+        }
+    }
+
+    def = this->add("fan_ramp_up_rate", coFloats);
+    def->label = L("Maximum fan increase");
+    def->tooltip = L("Limits how fast the curve's fan speed may rise with height, to avoid visible lines from sudden fan "
+                     "changes. The rise is started early on the layers below, so no layer gets less fan than the curve "
+                     "asks for. 0 = no limit. Applies to the Curve and Breakpoints modes; bridge and overhang fan "
+                     "speeds are not limited.");
+    def->sidetext = L("%/mm");
+    def->min = 0;
+    def->max = 1000;
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionFloats{0.});
+
+    def = this->add("fan_ramp_down_rate", coFloats);
+    def->label = L("Maximum fan decrease");
+    def->tooltip = L("Limits how fast the curve's fan speed may drop with height. The layers after a drop keep "
+                     "slightly more fan than the curve asks for. 0 = no limit. Applies to the Curve and Breakpoints "
+                     "modes.");
+    def->sidetext = L("%/mm");
+    def->min = 0;
+    def->max = 1000;
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionFloats{0.});
+
     def = this->add("fan_spinup_time", coInts);
     def->label = L("Spin-up time");
     def->tooltip = L("Time in milliseconds for the part cooling fan to spin up from 0% to 100%. "
@@ -1562,7 +1669,10 @@ void PrintConfigDef::init_fff_params()
     def->label = L("Overhang perimeters");
     def->tooltip = L("Enable early fan spin-up before overhang perimeters. "
                      "When enabled, the fan command is issued early enough for the fan to reach target speed "
-                     "before the overhang begins. Requires Spin-up time > 0.");
+                     "before the overhang begins. Requires Spin-up time > 0.\n"
+                     "With dynamic fan speeds, this also applies to the dynamic overhang fan: each increase "
+                     "starts early, and a decrease is skipped when the next increase comes sooner than the fan "
+                     "could spin back up, so the fan holds through an overhang made of many short segments.");
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionBools{false});
 
@@ -5970,6 +6080,10 @@ void PrintConfigDef::init_scope_reasons()
     // Every object on a layer shares the layer time
     set(ScopeReason::LayerTime,
         {"cooling", "cooling_slowdown_logic", "cooling_perimeter_transition_distance", "fan_below_layer_time",
+         "fan_control_mode", "fan_curve_start_time", "fan_curve_full_time", "fan_curve_shape", "fan_curve_time_0",
+         "fan_curve_time_1", "fan_curve_time_2", "fan_curve_time_3", "fan_curve_time_4", "fan_curve_time_5",
+         "fan_curve_speed_0", "fan_curve_speed_1", "fan_curve_speed_2", "fan_curve_speed_3", "fan_curve_speed_4",
+         "fan_curve_speed_5", "fan_ramp_up_rate", "fan_ramp_down_rate",
          "min_print_speed", "slowdown_below_layer_time", "dont_slow_down_outer_wall"});
     // Multi-material purge, ramming and tool-change plumbing
     set(ScopeReason::Mmu, {"filament_loading_speed",

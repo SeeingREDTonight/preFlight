@@ -235,6 +235,8 @@ set(PREFLIGHT_GUI_SOURCES
     GUI/ExtruderSequenceDialog.hpp
     GUI/WipeTowerDialog.cpp
     GUI/WipeTowerDialog.hpp
+    GUI/FanCurveChart.cpp
+    GUI/FanCurveChart.hpp
     GUI/RammingChart.cpp
     GUI/RammingChart.hpp
     GUI/RemovableDriveManager.cpp

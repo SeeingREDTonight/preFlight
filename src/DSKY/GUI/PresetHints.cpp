@@ -37,24 +37,46 @@ std::string PresetHints::cooling_description(const Preset &preset)
         int max_fan_speed = preset.config.opt_int("max_fan_speed", 0);
         int min_print_speed = int(preset.config.opt_float("min_print_speed", 0) + 0.5);
 
-        out += DSKY::format(_L("If estimated layer time is below ~%1%s, "
-                               "fan will run at %2%%% and print speed will be reduced "
-                               "so that no less than %3%s are spent on that layer "
-                               "(however, speed will never be reduced below %4%mm/s)."),
-                            slowdown_below_layer_time, max_fan_speed, slowdown_below_layer_time, min_print_speed);
-        if (fan_below_layer_time > slowdown_below_layer_time)
+        const ConfigOption *fan_mode_opt = preset.config.option("fan_control_mode");
+        const FanControlMode fan_mode = fan_mode_opt != nullptr && !fan_mode_opt->getInts().empty()
+                                            ? static_cast<FanControlMode>(fan_mode_opt->getInts().front())
+                                            : FanControlMode::Legacy;
+        if (fan_mode != FanControlMode::Legacy)
         {
+            // The fan follows the curve (see the preview); only the slowdown is described here.
+            out += DSKY::format(_L("If estimated layer time is below ~%1%s, print speed will be reduced "
+                                   "so that no less than %1%s are spent on that layer "
+                                   "(however, speed will never be reduced below %2%mm/s)."),
+                                slowdown_below_layer_time, min_print_speed);
             out += "\n";
-            if (min_fan_speed != max_fan_speed)
-                out += DSKY::format(_L("If estimated layer time is greater, but still below ~%1%s, "
-                                       "fan will run at a proportionally decreasing speed between %2%%% and %3%%%."),
-                                    fan_below_layer_time, max_fan_speed, min_fan_speed);
-            else
-                out += DSKY::format(_L("If estimated layer time is greater, but still below ~%1%s, "
-                                       "fan will run at %2%%%"),
-                                    fan_below_layer_time, min_fan_speed);
+            out += fan_mode == FanControlMode::Curve
+                       ? _u8L("The fan follows the curve in the Fan curve preview below, "
+                              "read from the layer time before slowdown.")
+                       : _u8L("The fan follows the breakpoints in the Fan curve preview below, "
+                              "read from the layer time before slowdown.");
+            out += "\n";
         }
-        out += "\n";
+        else
+        {
+            out += DSKY::format(_L("If estimated layer time is below ~%1%s, "
+                                   "fan will run at %2%%% and print speed will be reduced "
+                                   "so that no less than %3%s are spent on that layer "
+                                   "(however, speed will never be reduced below %4%mm/s)."),
+                                slowdown_below_layer_time, max_fan_speed, slowdown_below_layer_time, min_print_speed);
+            if (fan_below_layer_time > slowdown_below_layer_time)
+            {
+                out += "\n";
+                if (min_fan_speed != max_fan_speed)
+                    out += DSKY::format(_L("If estimated layer time is greater, but still below ~%1%s, "
+                                           "fan will run at a proportionally decreasing speed between %2%%% and %3%%%."),
+                                        fan_below_layer_time, max_fan_speed, min_fan_speed);
+                else
+                    out += DSKY::format(_L("If estimated layer time is greater, but still below ~%1%s, "
+                                           "fan will run at %2%%%"),
+                                        fan_below_layer_time, min_fan_speed);
+            }
+            out += "\n";
+        }
     }
     if (preset.config.opt_bool("fan_always_on", 0))
     {

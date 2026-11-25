@@ -21,6 +21,8 @@
 #include "luminary/geometry/primitives/Point.hpp"
 #include "luminary/config/catalog/PrintConfig.hpp"
 #include "FanRampEstimator.hpp"
+#include "FanCurve.hpp"
+#include <deque>
 
 namespace Luminary
 {
@@ -43,23 +45,36 @@ class CoolingBuffer
 {
 public:
     CoolingBuffer(GCodeGenerator &gcodegen);
+    // Out of line: the pending-layer queue holds PerExtruderAdjustments, defined in the .cpp.
+    ~CoolingBuffer();
     void reset(const Vec3d &position);
-    void set_current_extruder(unsigned int extruder_id) { m_current_extruder = extruder_id; }
-    std::string process_layer(std::string &&gcode, size_t layer_id, bool flush);
-    std::string process_layer(const std::string &gcode, size_t layer_id, bool flush)
+    void set_current_extruder(unsigned int extruder_id)
     {
-        return this->process_layer(std::string(gcode), layer_id, flush);
+        m_current_extruder = extruder_id;
+        m_parse_extruder = extruder_id;
+    }
+    // print_z: the layer's height, for the fan curve's per-mm change limit. last_layer: the final
+    // layer of the run (the print, or one object in sequential mode); drains the look-ahead queue.
+    std::string process_layer(std::string &&gcode, size_t layer_id, bool flush, double print_z = 0.,
+                              bool last_layer = false);
+    std::string process_layer(const std::string &gcode, size_t layer_id, bool flush, double print_z = 0.,
+                              bool last_layer = false)
+    {
+        return this->process_layer(std::string(gcode), layer_id, flush, print_z, last_layer);
     }
 
 private:
     CoolingBuffer &operator=(const CoolingBuffer &) = delete;
-    std::vector<PerExtruderAdjustments> parse_layer_gcode(const std::string &gcode,
-                                                          std::array<float, 5> &current_pos) const;
+    // current_extruder: the extruder active at the start of the G-code; updated to the one active at its end.
+    std::vector<PerExtruderAdjustments> parse_layer_gcode(const std::string &gcode, std::array<float, 5> &current_pos,
+                                                          unsigned int &current_extruder) const;
     float calculate_layer_slowdown(std::vector<PerExtruderAdjustments> &per_extruder_adjustments);
     // Apply slow down over G-code lines stored in per_extruder_adjustments, enable fan if needed.
     // Returns the adjusted G-code.
+    // fan_override: per extruder id, the base fan % the fan curve picked (negative: use the stock logic).
     std::string apply_layer_cooldown(const std::string &gcode, size_t layer_id, float layer_time,
-                                     std::vector<PerExtruderAdjustments> &per_extruder_adjustments);
+                                     std::vector<PerExtruderAdjustments> &per_extruder_adjustments,
+                                     const std::vector<double> *fan_override = nullptr);
 
     // G-code snippet cached for the support layers preceding an object layer.
     std::string m_gcode;
@@ -99,6 +114,36 @@ private:
 
     // Initialize fan ramp estimators from config
     void init_fan_ramp_estimators();
+
+    // ---- Fan curve (Curve / Breakpoints modes) ----
+    // Per extruder id: the curve and its change limits, from the filament config.
+    std::vector<FanCurve> m_fan_curves;
+    std::vector<FanRampLimits> m_fan_ramp_limits;
+    // Any extruder uses a non-stock mode / a rise limit (which needs look-ahead).
+    bool m_fan_curve_used{false};
+    double m_fan_lookahead_mm{0.};
+    void init_fan_curves();
+
+    // The extruder active at the end of the last parsed layer. Parsing runs ahead of
+    // apply_layer_cooldown (which tracks m_current_extruder) while layers wait in the queue.
+    unsigned int m_parse_extruder{0};
+
+    // A layer parsed and slowed down, waiting for enough look-ahead to set its fan.
+    struct PendingLayer
+    {
+        std::string gcode;
+        size_t layer_id;
+        double print_z;
+        float layer_time_stretched;
+        std::vector<PerExtruderAdjustments> adjustments;
+        std::vector<double> target; // per extruder id, the curve's fan % (negative: stock logic)
+    };
+    std::deque<PendingLayer> m_pending;
+    // The fan each extruder's curve emitted on the previous layer, and that layer's height.
+    std::vector<double> m_ramp_prev_fan;
+    double m_ramp_prev_z{0.};
+    // Sets the front pending layer's fan and emits it.
+    std::string emit_pending_front();
 };
 
 } // namespace Luminary

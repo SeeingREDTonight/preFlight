@@ -86,6 +86,11 @@ struct LayerResult
     // Is indicating if this LayerResult should be processed, or it is just inserted artificial LayerResult.
     // It is used for the pressure equalizer because it needs to buffer one layer back.
     bool nop_layer_result{false};
+    // The layer's print_z, for the cooling buffer's per-mm fan change limit.
+    double print_z{0.};
+    // The final layer of this run (the print, or one object in sequential mode): the cooling
+    // buffer drains its fan look-ahead queue here.
+    bool last_layer{false};
 
     static LayerResult make_nop_layer_result() { return {"", std::numeric_limits<coord_t>::max(), false, false, true}; }
 };

@@ -405,6 +405,14 @@ enum class CoolingSlowdownLogicType
     Proportional,
 };
 
+// How the automatic cooling picks the base fan speed from the layer time.
+enum class FanControlMode
+{
+    Legacy,      // min/max interpolated between the slowdown and fan layer-time thresholds
+    Curve,       // min/max shaped on a log-time axis between a start and a full-speed layer time
+    Breakpoints, // layer time / fan speed rows, interpolated on a log-time axis
+};
+
 #define CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(NAME)                     \
     template<>                                                           \
     const t_config_enum_names &ConfigOptionEnum<NAME>::get_enum_names(); \
@@ -442,6 +450,7 @@ CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(PerimeterGeneratorType)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(TopOnePerimeterType)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(EnsureVerticalShellThickness)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(CoolingSlowdownLogicType)
+CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(FanControlMode)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(FanSpinupResponseType)
 
 #undef CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS
@@ -1158,6 +1167,15 @@ PRINT_CONFIG_CLASS_DERIVED_DEFINE(
         (ConfigOptionFloat, extruder_clearance_height))((ConfigOptionFloat, extruder_clearance_radius))(
         (ConfigOptionStrings, extruder_colour))((ConfigOptionPoints, extruder_offset))(
         (ConfigOptionBools, fan_always_on))((ConfigOptionInts, fan_below_layer_time))(
+        (ConfigOptionEnums<FanControlMode>, fan_control_mode))((ConfigOptionFloats, fan_curve_start_time))(
+        (ConfigOptionFloats, fan_curve_full_time))((ConfigOptionFloats, fan_curve_shape))(
+        (ConfigOptionFloats, fan_curve_time_0))((ConfigOptionInts, fan_curve_speed_0))(
+        (ConfigOptionFloats, fan_curve_time_1))((ConfigOptionInts, fan_curve_speed_1))(
+        (ConfigOptionFloats, fan_curve_time_2))((ConfigOptionInts, fan_curve_speed_2))(
+        (ConfigOptionFloats, fan_curve_time_3))((ConfigOptionInts, fan_curve_speed_3))(
+        (ConfigOptionFloats, fan_curve_time_4))((ConfigOptionInts, fan_curve_speed_4))(
+        (ConfigOptionFloats, fan_curve_time_5))((ConfigOptionInts, fan_curve_speed_5))(
+        (ConfigOptionFloats, fan_ramp_up_rate))((ConfigOptionFloats, fan_ramp_down_rate))(
         (ConfigOptionInts, fan_spinup_time))((ConfigOptionEnums<FanSpinupResponseType>, fan_spinup_response_type))(
         (ConfigOptionBools, fan_spinup_bridge_infill))((ConfigOptionBools, fan_spinup_overhang_perimeter))(
         (ConfigOptionBools, fan_spinup_serpentine_overhang))((ConfigOptionStrings, filament_colour))(

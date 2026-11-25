@@ -588,6 +588,7 @@ set(LUMINARY_SOURCES
     gcode/writer/GCodeWriter.cpp
     gcode/filters/CoolingBuffer.hpp
     gcode/filters/CoolingBuffer.cpp
+    gcode/filters/FanCurve.hpp
     gcode/filters/FanRampEstimator.hpp
     gcode/filters/FanRampEstimator.cpp
     gcode/filters/FindReplace.hpp

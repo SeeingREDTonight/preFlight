@@ -1975,6 +1975,8 @@ void GCodeGenerator::process_layers(const Print &print, const ToolOrdering &tool
             bool last_layer = in.layer_id == layers_to_print.size() - 1;
             LayerResult out{spiral_vase->process_layer(std::move(in.gcode), last_layer), in.layer_id,
                             in.spiral_vase_enable, in.cooling_buffer_flush};
+            out.print_z = in.print_z;
+            out.last_layer = in.last_layer;
             t_spiral.add(ts0, std::chrono::steady_clock::now());
             return out;
         });
@@ -2000,7 +2002,8 @@ void GCodeGenerator::process_layers(const Print &print, const ToolOrdering &tool
                 if (idx < 5 || idx % 20 == 0 || idx == layers_to_print.size() - 1)
                     fprintf(stderr, "[TIMELINE] L%03zu cooling  ENTER  @ %7.1fms\n", idx, elapsed());
             auto tc0 = std::chrono::steady_clock::now();
-            auto result = cooling_buffer->process_layer(std::move(in.gcode), in.layer_id, in.cooling_buffer_flush);
+            auto result = cooling_buffer->process_layer(std::move(in.gcode), in.layer_id, in.cooling_buffer_flush,
+                                                        in.print_z, in.last_layer);
             t_cooling.add(tc0, std::chrono::steady_clock::now());
             if constexpr (PERF_TIMING)
                 if (idx < 5 || idx % 20 == 0 || idx == layers_to_print.size() - 1)
@@ -2131,8 +2134,11 @@ void GCodeGenerator::process_layers(const Print &print, const ToolOrdering &tool
                 return in;
             spiral_vase->enable(in.spiral_vase_enable);
             bool last_layer = in.layer_id == layers_to_print.size() - 1;
-            return {spiral_vase->process_layer(std::move(in.gcode), last_layer), in.layer_id, in.spiral_vase_enable,
-                    in.cooling_buffer_flush};
+            LayerResult out{spiral_vase->process_layer(std::move(in.gcode), last_layer), in.layer_id,
+                            in.spiral_vase_enable, in.cooling_buffer_flush};
+            out.print_z = in.print_z;
+            out.last_layer = in.last_layer;
+            return out;
         });
     const auto pressure_equalizer = tbb::make_filter<LayerResult, LayerResult>(
         tbb_filtermode::serial_in_order,
@@ -2144,7 +2150,8 @@ void GCodeGenerator::process_layers(const Print &print, const ToolOrdering &tool
         {
             if (in.nop_layer_result)
                 return in.gcode;
-            return cooling_buffer->process_layer(std::move(in.gcode), in.layer_id, in.cooling_buffer_flush);
+            return cooling_buffer->process_layer(std::move(in.gcode), in.layer_id, in.cooling_buffer_flush,
+                                                 in.print_z, in.last_layer);
         });
     const auto find_replace = tbb::make_filter<std::string, std::string>(
         tbb_filtermode::serial_in_order, [find_replace = this->m_find_replace.get()](std::string s) -> std::string
@@ -3193,6 +3200,8 @@ LayerResult GCodeGenerator::process_layer(
     }
     const Layer &layer = (object_layer != nullptr) ? *object_layer : *support_layer;
     LayerResult result{{}, layer.id(), false, last_layer, false};
+    result.print_z = layer.print_z;
+    result.last_layer = last_layer;
 
     if (layer_tools.extruders.empty())
         // Nothing to extrude.

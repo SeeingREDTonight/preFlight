@@ -90,6 +90,7 @@
 #include "EditGCodeDialog.hpp"
 #include "MsgDialog.hpp"
 #include "TopBar.hpp"
+#include "FanCurveChart.hpp"
 
 #include "Widgets/CheckBox.hpp"
 #include "Widgets/SpinInput.hpp"
@@ -2945,7 +2946,7 @@ int TabFilament::spec_group_label_width(const SettingRow &first_row)
     // The fan groups carry long labels next to short fields
     const std::string_view group(first_row.group);
     if (group == "Manual fan controls" || group == "Dynamic fan speeds" || group == "Fan spin-up" ||
-        group == "Cooling thresholds")
+        group == "Cooling thresholds" || group == "Fan curve")
         return 25;
     return Tab::spec_group_label_width(first_row);
 }
@@ -3001,6 +3002,19 @@ void TabFilament::after_spec_row(ConfigOptionsGroupShp &optgroup, const SettingR
             widget_line([this](wxWindow *parent)
                         { return description_line_widget(parent, &m_volumetric_speed_description_line); }));
     }
+    else if (key == "fan_ramp_down_rate")
+    {
+        // The preview of the active fan control, below the last fan curve row
+        optgroup->append_line(widget_line(
+            [this](wxWindow *parent)
+            {
+                m_fan_curve_chart = new FanCurveChart(parent);
+                m_fan_curve_chart->update_from_config(*m_config);
+                auto sizer = new wxBoxSizer(wxHORIZONTAL);
+                sizer->Add(m_fan_curve_chart, 0, wxTOP | wxBOTTOM, wxGetApp().em_unit() / 2);
+                return sizer;
+            }));
+    }
     else if (key == "cooling_perimeter_transition_distance")
     {
         optgroup->append_line(widget_line([this](wxWindow *parent)
@@ -3037,6 +3051,8 @@ void TabFilament::update_description_lines()
 
     if (m_active_page->title() == "Cooling" && m_cooling_description_line)
         m_cooling_description_line->SetText(from_u8(PresetHints::cooling_description(m_presets->get_edited_preset())));
+    if (m_active_page->title() == "Cooling" && m_fan_curve_chart)
+        m_fan_curve_chart->update_from_config(*m_config);
     if (m_active_page->title() == "Filament" && m_volumetric_speed_description_line)
         this->update_volumetric_flow_preset_hints();
 }
@@ -3083,6 +3099,7 @@ void TabFilament::clear_pages()
 
     m_volumetric_speed_description_line = nullptr;
     m_cooling_description_line = nullptr;
+    m_fan_curve_chart = nullptr;
 
     for (auto &over_opt : m_overrides_options)
         over_opt.second = nullptr;
@@ -3098,6 +3115,8 @@ void TabFilament::msw_rescale()
 
 void TabFilament::sys_color_changed()
 {
+    if (m_fan_curve_chart)
+        m_fan_curve_chart->sys_color_changed();
     wxGetApp().UpdateDarkUI(m_extruders_cb);
     m_extruders_cb->Clear();
     update_extruder_combobox();
