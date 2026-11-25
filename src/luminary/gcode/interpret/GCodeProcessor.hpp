@@ -343,13 +343,16 @@ public:
         // - MIN_STEPS_PER_SEGMENT (minimum 6 steps before moving)
         // - min_segment_time_us (M205 B parameter, typically 20000us)
         // Short segments (dense infill, arc linearization) get stretched to this minimum.
+        // Klipper has no such floor: its host-side lookahead plans tiny segments at full speed, so
+        // the floor is set to 0 for the Klipper flavor (see min_segment_time_for_flavor()).
         static constexpr float MIN_SEGMENT_TIME_SEC = 0.016f; // 16ms
+        float min_segment_time{MIN_SEGMENT_TIME_SEC};
 
         float time() const
         {
             const float calculated = trapezoid.acceleration_time(feedrate_profile.entry, acceleration) +
                                      trapezoid.cruise_time() + trapezoid.deceleration_time(distance, acceleration);
-            return std::max(calculated, MIN_SEGMENT_TIME_SEC);
+            return std::max(calculated, min_segment_time);
         }
     };
 

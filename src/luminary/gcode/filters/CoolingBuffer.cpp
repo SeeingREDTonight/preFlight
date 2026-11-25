@@ -125,6 +125,8 @@ public:
         , m_deretract_speed(get_config_float(config.deretract_speed, extruder_id, 0.0f))
         , m_retract_lift(get_config_float(config.retract_lift, extruder_id, 0.0f))
         , m_travel_speed(static_cast<float>(config.travel_speed.value)) // mm/s
+        // Klipper's lookahead has no minimum segment time (see GCodeProcessor::TimeBlock).
+        , m_min_segment_time(config.gcode_flavor.value == gcfKlipper ? 0.0f : MIN_SEGMENT_TIME_SEC)
     {
         // If deretract_speed is 0, use retract_speed
         if (m_deretract_speed <= 0.0f)
@@ -161,7 +163,7 @@ public:
             // Otherwise, trapezoidal profile - simple_time is close enough for medium complexity
         }
 
-        return std::max(simple_time, MIN_SEGMENT_TIME_SEC);
+        return std::max(simple_time, m_min_segment_time);
     }
 
     // Estimate time for a firmware retract (G10) - E-axis only, starts/ends at rest
@@ -238,6 +240,7 @@ private:
     float m_deretract_speed;
     float m_retract_lift;
     float m_travel_speed;
+    float m_min_segment_time;
 
     static float get_config_float(const ConfigOptionFloats &option, unsigned int id, float default_val)
     {
@@ -284,7 +287,7 @@ private:
             time = 2.0f * accel_time + cruise_time;
         }
 
-        return std::max(time, MIN_SEGMENT_TIME_SEC);
+        return std::max(time, m_min_segment_time);
     }
 };
 

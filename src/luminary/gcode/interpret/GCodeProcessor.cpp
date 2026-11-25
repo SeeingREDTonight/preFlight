@@ -5119,6 +5119,7 @@ void GCodeProcessor::process_G1(const std::array<std::optional<double>, 4> &axes
                             : minimum_feedrate(static_cast<PrintEstimatedStatistics::ETimeMode>(i), m_feedrate);
 
         TimeBlock block;
+        block.min_segment_time = (m_flavor == gcfKlipper) ? 0.0f : TimeBlock::MIN_SEGMENT_TIME_SEC;
         block.move_type = type;
         block.role = m_extrusion_role;
         block.distance = distance;
@@ -5747,6 +5748,7 @@ void GCodeProcessor::create_firmware_retract_time_block(EMoveType type, float di
         float limited_accel = (axis_max_accel > 0.0f) ? std::min(acceleration, axis_max_accel) : acceleration;
 
         TimeBlock block;
+        block.min_segment_time = (m_flavor == gcfKlipper) ? 0.0f : TimeBlock::MIN_SEGMENT_TIME_SEC;
         block.move_type = type;
         block.role = GCodeExtrusionRole::None;
         block.distance = distance;
